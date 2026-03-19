@@ -1,0 +1,31 @@
+{
+  "tests": [
+    {
+      "name": "Register new user",
+      "method": "POST",
+      "path": "/?action=register",
+      "body": {"nick": "testuser99", "name": "Тест Юзер", "password": "pass1234"},
+      "expectedStatus": 200,
+      "expectedBody": {"ok": true},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Login user",
+      "method": "POST",
+      "path": "/?action=login",
+      "body": {"nick": "testuser99", "password": "pass1234"},
+      "expectedStatus": 200,
+      "expectedBody": {"ok": true},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Wrong password",
+      "method": "POST",
+      "path": "/?action=login",
+      "body": {"nick": "testuser99", "password": "wrong"},
+      "expectedStatus": 401,
+      "expectedBody": {"error": "Неверный ник или пароль"},
+      "bodyMatcher": "partial"
+    }
+  ]
+}

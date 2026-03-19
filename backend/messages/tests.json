@@ -1,0 +1,12 @@
+{
+  "tests": [
+    {
+      "name": "Get bot history unauthorized",
+      "method": "GET",
+      "path": "/?action=bot",
+      "expectedStatus": 401,
+      "expectedBody": {"error": "Не авторизован"},
+      "bodyMatcher": "partial"
+    }
+  ]
+}

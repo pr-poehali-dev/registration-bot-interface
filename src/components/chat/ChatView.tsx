@@ -21,9 +21,9 @@ function Avatar({ text, color, size = 40, online, sidebarBg }: {
 
 export { Avatar };
 
-export default function ChatView({ chat, messages, onSend, isTyping, theme, onBack }: {
+export default function ChatView({ chat, messages, onSend, isTyping, loading, theme, onBack }: {
   chat: Chat; messages: Message[]; onSend: (text: string) => void;
-  isTyping: boolean; theme: Theme; onBack?: () => void;
+  isTyping: boolean; loading?: boolean; theme: Theme; onBack?: () => void;
 }) {
   const [input, setInput] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
@@ -78,6 +78,17 @@ export default function ChatView({ chat, messages, onSend, isTyping, theme, onBa
 
       {/* Сообщения */}
       <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 space-y-2" style={{ background: chatAreaBg }}>
+        {loading && (
+          <div className="flex justify-center py-8 animate-fade-in">
+            <div className="w-6 h-6 rounded-full border-2 border-purple-500/30 border-t-purple-500 animate-spin" />
+          </div>
+        )}
+        {!loading && messages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full gap-2 opacity-50">
+            <span className="text-3xl">💬</span>
+            <p className="text-xs" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.4)" }}>Начни переписку!</p>
+          </div>
+        )}
         {messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.from === "me" ? "justify-end" : "justify-start"} animate-msg`}>
             <div className="max-w-[80%] sm:max-w-[75%]">

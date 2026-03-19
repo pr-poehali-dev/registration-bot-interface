@@ -13,7 +13,9 @@ export interface Message {
 
 export interface Chat {
   id: number;
+  partner_id: number;
   name: string;
+  nick: string;
   avatar: string;
   lastMsg: string;
   time: string;
@@ -22,74 +24,117 @@ export interface Chat {
   isBot?: boolean;
 }
 
-export interface StoredUser {
-  nick: string;
-  name: string;
-  password: string;
-}
-
 // ===== КОНСТАНТЫ =====
-export const CONTACTS = [
-  { id: 1, name: "Алина Морозова", avatar: "АМ", status: "В сети", color: "#a855f7" },
-  { id: 2, name: "Дмитрий Ковалёв", avatar: "ДК", status: "30 мин назад", color: "#3b82f6" },
-  { id: 3, name: "Катя Белова", avatar: "КБ", status: "В сети", color: "#ec4899" },
-  { id: 4, name: "Макс Орлов", avatar: "МО", status: "Вчера", color: "#f97316" },
-  { id: 5, name: "Соня Лебедева", avatar: "СЛ", status: "В сети", color: "#06b6d4" },
-];
-
-export const VESELUSHKA_REPLIES: Record<string, string> = {
-  "привет": "Привет-привет! 👋 Какие дела?",
-  "как дела": "Отлично! Я бот, у меня всегда хорошее настроение 😄 А у тебя как?",
-  "ты кто": "Я бот Веселушка! 🤖 Помогаю сделать общение ярче и веселее в этом мессенджере!",
-  "что умеешь": "Я умею общаться, поднимать настроение и быть рядом, когда скучно! 🎉",
-  "анекдот": "Почему программисты путают Halloween и Christmas? Потому что Oct 31 == Dec 25! 😂",
-  "как тебя зовут": "Меня зовут Веселушка! Твой верный бот-друг 🌟",
-  "пока": "Пока-пока! Буду скучать! 👋😊",
-  "хорошо": "Вот и отлично! 🌈 Хорошее настроение — это главное!",
-  "плохо": "Не грусти! Я рядом 🫂 Напиши анекдот — подниму настроение!",
-};
-
 export const EMOJIS = [
   "😊", "😢", "😂", "❤️", "👍", "🔥", "😍", "🥺",
   "😎", "🤔", "😅", "🎉", "🙏", "💪", "✨", "😘",
   "🤣", "😱", "👏", "💯", "🥰", "😏", "🤗", "😭",
 ];
 
-// ===== УТИЛИТЫ =====
-export function getVeselushkaReply(text: string): string {
-  const lower = text.toLowerCase().trim();
-  for (const key in VESELUSHKA_REPLIES) {
-    if (lower.includes(key)) return VESELUSHKA_REPLIES[key];
-  }
-  return "Интересно! 😊 Напиши «анекдот» — расскажу смешное, или «что умеешь» — покажу возможности!";
+// ===== API URLs =====
+const AUTH_URL = "https://functions.poehali.dev/8c526912-ae6f-4e2f-9cf3-c5a0ef311f73";
+const MESSAGES_URL = "https://functions.poehali.dev/d4968893-eb2a-4491-9ba4-58edfd271760";
+const CONTACTS_URL = "https://functions.poehali.dev/ae667d64-11b5-45de-851b-5f06e6533dca";
+
+// ===== СЕССИЯ =====
+export function getToken(): string {
+  return localStorage.getItem("vc_token") || "";
+}
+export function saveToken(token: string) {
+  localStorage.setItem("vc_token", token);
+}
+export function getStoredUser(): { id: number; nick: string; name: string } | null {
+  try { return JSON.parse(localStorage.getItem("vc_user") || "null"); } catch { return null; }
+}
+export function saveStoredUser(user: { id: number; nick: string; name: string }) {
+  localStorage.setItem("vc_user", JSON.stringify(user));
+}
+export function clearSession() {
+  localStorage.removeItem("vc_token");
+  localStorage.removeItem("vc_user");
 }
 
+// ===== API AUTH =====
+export async function apiRegister(nick: string, name: string, password: string, phone?: string) {
+  const res = await fetch(`${AUTH_URL}?action=register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nick, name, password, phone }),
+  });
+  return res.json();
+}
+
+export async function apiLogin(nick: string, password: string) {
+  const res = await fetch(`${AUTH_URL}?action=login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nick, password }),
+  });
+  return res.json();
+}
+
+export async function apiMe(token: string) {
+  const res = await fetch(`${AUTH_URL}?action=me`, {
+    headers: { "X-Session-Token": token },
+  });
+  return res.json();
+}
+
+// ===== API MESSAGES =====
+export async function apiBotHistory(token: string) {
+  const res = await fetch(`${MESSAGES_URL}?action=bot`, {
+    headers: { "X-Session-Token": token },
+  });
+  return res.json();
+}
+
+export async function apiBotSend(token: string, text: string) {
+  const res = await fetch(`${MESSAGES_URL}?action=bot`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Session-Token": token },
+    body: JSON.stringify({ text }),
+  });
+  return res.json();
+}
+
+export async function apiChatHistory(token: string, with_user_id: number) {
+  const res = await fetch(`${MESSAGES_URL}?action=chat&with_user_id=${with_user_id}`, {
+    headers: { "X-Session-Token": token },
+  });
+  return res.json();
+}
+
+export async function apiChatSend(token: string, with_user_id: number, text: string) {
+  const res = await fetch(`${MESSAGES_URL}?action=chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Session-Token": token },
+    body: JSON.stringify({ with_user_id, text }),
+  });
+  return res.json();
+}
+
+export async function apiGetChats(token: string) {
+  const res = await fetch(`${MESSAGES_URL}?action=chats`, {
+    headers: { "X-Session-Token": token },
+  });
+  return res.json();
+}
+
+// ===== API CONTACTS =====
+export async function apiSearchByPhone(token: string, phone: string) {
+  const res = await fetch(`${CONTACTS_URL}?action=search&phone=${encodeURIComponent(phone)}`, {
+    headers: { "X-Session-Token": token },
+  });
+  return res.json();
+}
+
+// ===== УТИЛИТЫ =====
 export function nowTime() {
   return new Date().toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" });
 }
 
-// ===== ХРАНИЛИЩЕ =====
-export function getUsers(): StoredUser[] {
-  try { return JSON.parse(localStorage.getItem("vc_users") || "[]"); } catch { return []; }
-}
-
-export function saveUser(user: StoredUser) {
-  const users = getUsers(); users.push(user);
-  localStorage.setItem("vc_users", JSON.stringify(users));
-}
-
-export function findUser(nick: string, password: string): StoredUser | null {
-  return getUsers().find((u) => u.nick.toLowerCase() === nick.toLowerCase() && u.password === password) || null;
-}
-
-export function getSession(): { nick: string; name: string } | null {
-  try { return JSON.parse(localStorage.getItem("vc_session") || "null"); } catch { return null; }
-}
-
-export function setSession(nick: string, name: string) {
-  localStorage.setItem("vc_session", JSON.stringify({ nick, name }));
-}
-
-export function clearSession() {
-  localStorage.removeItem("vc_session");
+export function nameToAvatar(name: string): string {
+  const parts = name.trim().split(" ");
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
 }

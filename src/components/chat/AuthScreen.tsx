@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AuthMode, Theme, getUsers, saveUser, findUser, setSession } from "@/lib/chat-types";
+import { AuthMode, Theme, apiRegister, apiLogin, saveToken, saveStoredUser } from "@/lib/chat-types";
 
 function Particles({ theme }: { theme: Theme }) {
   return (
@@ -18,35 +18,40 @@ function Particles({ theme }: { theme: Theme }) {
 }
 
 export default function AuthScreen({ onLogin, theme }: {
-  onLogin: (nick: string, name: string) => void;
+  onLogin: (user: { id: number; nick: string; name: string }) => void;
   theme: Theme;
 }) {
   const [mode, setMode] = useState<AuthMode>("register");
   const [nick, setNick] = useState("");
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const isDark = theme === "dark";
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    setError("");
     if (mode === "register") {
       if (!nick.trim() || !name.trim() || !password.trim()) { setError("Заполни все поля!"); return; }
       if (nick.length < 3) { setError("Ник минимум 3 символа"); return; }
       if (password.length < 4) { setError("Пароль минимум 4 символа"); return; }
-      if (getUsers().find((u) => u.nick.toLowerCase() === nick.toLowerCase())) { setError("Такой ник уже занят!"); return; }
-      setError(""); setLoading(true);
-      setTimeout(() => {
-        saveUser({ nick: nick.trim(), name: name.trim(), password });
-        setSession(nick.trim(), name.trim());
-        setLoading(false); onLogin(nick.trim(), name.trim());
-      }, 1000);
+      setLoading(true);
+      const data = await apiRegister(nick.trim(), name.trim(), password, phone.trim() || undefined);
+      setLoading(false);
+      if (data.error) { setError(data.error); return; }
+      saveToken(data.token);
+      saveStoredUser(data.user);
+      onLogin(data.user);
     } else {
       if (!nick.trim() || !password.trim()) { setError("Введи ник и пароль!"); return; }
-      const found = findUser(nick.trim(), password);
-      if (!found) { setError("Неверный ник или пароль!"); return; }
-      setError(""); setLoading(true);
-      setTimeout(() => { setSession(found.nick, found.name); setLoading(false); onLogin(found.nick, found.name); }, 900);
+      setLoading(true);
+      const data = await apiLogin(nick.trim(), password);
+      setLoading(false);
+      if (data.error) { setError(data.error); return; }
+      saveToken(data.token);
+      saveStoredUser(data.user);
+      onLogin(data.user);
     }
   };
 
@@ -57,6 +62,8 @@ export default function AuthScreen({ onLogin, theme }: {
     fontFamily: "'Golos Text',sans-serif", width: "100%", padding: "12px 16px", fontSize: 14,
     outline: "none", transition: "all 0.3s ease",
   };
+
+  const labelStyle = { color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.5)" };
 
   return (
     <div className="fixed inset-0 flex items-center justify-center px-4" style={{ background: "var(--chat-bg)" }}>
@@ -85,19 +92,28 @@ export default function AuthScreen({ onLogin, theme }: {
 
           <div className="space-y-4">
             <div>
-              <label className="text-xs mb-1.5 block font-medium" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.5)" }}>Ник (логин)</label>
+              <label className="text-xs mb-1.5 block font-medium" style={labelStyle}>Ник (логин)</label>
               <input style={inputStyle} placeholder="@твой_ник" value={nick}
                 onChange={(e) => setNick(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSubmit()} />
             </div>
             {mode === "register" && (
-              <div className="animate-fade-in">
-                <label className="text-xs mb-1.5 block font-medium" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.5)" }}>Твоё имя</label>
-                <input style={inputStyle} placeholder="Как тебя зовут?" value={name}
-                  onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSubmit()} />
-              </div>
+              <>
+                <div className="animate-fade-in">
+                  <label className="text-xs mb-1.5 block font-medium" style={labelStyle}>Твоё имя</label>
+                  <input style={inputStyle} placeholder="Как тебя зовут?" value={name}
+                    onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSubmit()} />
+                </div>
+                <div className="animate-fade-in">
+                  <label className="text-xs mb-1.5 block font-medium" style={labelStyle}>
+                    Номер телефона <span style={{ color: isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.3)" }}>(необязательно — чтобы тебя нашли)</span>
+                  </label>
+                  <input style={inputStyle} placeholder="+7 999 123-45-67" value={phone} type="tel"
+                    onChange={(e) => setPhone(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSubmit()} />
+                </div>
+              </>
             )}
             <div>
-              <label className="text-xs mb-1.5 block font-medium" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.5)" }}>Пароль</label>
+              <label className="text-xs mb-1.5 block font-medium" style={labelStyle}>Пароль</label>
               <input style={inputStyle} type="password" placeholder="••••••••" value={password}
                 onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSubmit()} />
             </div>
@@ -119,7 +135,7 @@ export default function AuthScreen({ onLogin, theme }: {
         </div>
 
         <p className="text-center text-xs mt-5" style={{ color: isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.25)" }}>
-          VibeChat © 2024 · Версия 1.0
+          VibeChat © 2026 · Версия 2.0
         </p>
       </div>
     </div>
