@@ -39,9 +39,17 @@
     --neon-blue: #3b82f6;
     --neon-cyan: #06b6d4;
     --chat-bg: #0d0d1a;
+    --chat-bg-light: #f0f2f8;
     --sidebar-bg: #0a0a14;
     --msg-out: linear-gradient(135deg, #7c3aed, #ec4899);
     --msg-in: #1a1a2e;
+  }
+
+  [data-theme="light"] {
+    --chat-bg: #f0f2f8;
+    --sidebar-bg: #ffffff;
+    --background: 220 20% 96%;
+    --foreground: 220 20% 10%;
   }
 }
 
@@ -243,6 +251,13 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.glass-light {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.08);
+}
+
 .glass-dark {
   background: rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(20px);
@@ -348,6 +363,27 @@
   color: rgba(255, 255, 255, 0.3);
 }
 
+/* Плавный input светлая тема */
+.input-light {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  color: #1a1a2e;
+  transition: all 0.3s ease;
+  font-family: "Golos Text", sans-serif;
+}
+
+.input-light:focus {
+  outline: none;
+  border-color: var(--neon-purple);
+  background: rgba(168, 85, 247, 0.06);
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.12);
+}
+
+.input-light::placeholder {
+  color: rgba(0, 0, 0, 0.3);
+}
+
 /* Чат пузырьки */
 .msg-bubble-out {
   background: linear-gradient(135deg, #7c3aed, #ec4899);
@@ -360,6 +396,14 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 18px 18px 18px 4px;
   color: rgba(255, 255, 255, 0.9);
+}
+
+.msg-bubble-in-light {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 18px 18px 18px 4px;
+  color: #2d2d3e;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 /* Уведомление бейдж */

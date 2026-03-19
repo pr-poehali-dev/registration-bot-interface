@@ -5,6 +5,7 @@ import Icon from "@/components/ui/icon";
 type Screen = "auth" | "app";
 type AuthMode = "login" | "register";
 type Tab = "chats" | "contacts" | "bots" | "profile" | "settings";
+type Theme = "dark" | "light";
 
 interface Message {
   id: number;
@@ -45,6 +46,13 @@ const VESELUSHKA_REPLIES: Record<string, string> = {
   "плохо": "Не грусти! Я рядом 🫂 Напиши анекдот — подниму настроение!",
 };
 
+// Смайлики для панели
+const EMOJIS = [
+  "😊", "😢", "😂", "❤️", "👍", "🔥", "😍", "🥺",
+  "😎", "🤔", "😅", "🎉", "🙏", "💪", "✨", "😘",
+  "🤣", "😱", "👏", "💯", "🥰", "😏", "🤗", "😭",
+];
+
 function getVeselushkaReply(text: string): string {
   const lower = text.toLowerCase().trim();
   for (const key in VESELUSHKA_REPLIES) {
@@ -57,8 +65,46 @@ function nowTime() {
   return new Date().toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" });
 }
 
+// ===== ХРАНИЛИЩЕ ПОЛЬЗОВАТЕЛЕЙ =====
+interface StoredUser {
+  nick: string;
+  name: string;
+  password: string;
+}
+
+function getUsers(): StoredUser[] {
+  try {
+    return JSON.parse(localStorage.getItem("vc_users") || "[]");
+  } catch { return []; }
+}
+
+function saveUser(user: StoredUser) {
+  const users = getUsers();
+  users.push(user);
+  localStorage.setItem("vc_users", JSON.stringify(users));
+}
+
+function findUser(nick: string, password: string): StoredUser | null {
+  const users = getUsers();
+  return users.find((u) => u.nick.toLowerCase() === nick.toLowerCase() && u.password === password) || null;
+}
+
+function getSession(): { nick: string; name: string } | null {
+  try {
+    return JSON.parse(localStorage.getItem("vc_session") || "null");
+  } catch { return null; }
+}
+
+function setSession(nick: string, name: string) {
+  localStorage.setItem("vc_session", JSON.stringify({ nick, name }));
+}
+
+function clearSession() {
+  localStorage.removeItem("vc_session");
+}
+
 // ===== ЧАСТИЦЫ =====
-function Particles() {
+function Particles({ theme }: { theme: Theme }) {
   return (
     <div className="bg-particles">
       {[...Array(6)].map((_, i) => (
@@ -73,7 +119,7 @@ function Particles() {
             animationDuration: `${5 + i * 1.5}s`,
             animationDelay: `${i * 0.8}s`,
             background: i % 2 === 0 ? "var(--neon-purple)" : "var(--neon-pink)",
-            opacity: 0.05,
+            opacity: theme === "light" ? 0.03 : 0.05,
             filter: "blur(60px)",
           }}
         />
@@ -83,7 +129,7 @@ function Particles() {
 }
 
 // ===== ЭКРАН АВТОРИЗАЦИИ =====
-function AuthScreen({ onLogin }: { onLogin: (nick: string, name: string) => void }) {
+function AuthScreen({ onLogin, theme }: { onLogin: (nick: string, name: string) => void; theme: Theme }) {
   const [mode, setMode] = useState<AuthMode>("register");
   const [nick, setNick] = useState("");
   const [name, setName] = useState("");
@@ -91,24 +137,45 @@ function AuthScreen({ onLogin }: { onLogin: (nick: string, name: string) => void
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const isDark = theme === "dark";
+
   const handleSubmit = () => {
     if (mode === "register") {
       if (!nick.trim() || !name.trim() || !password.trim()) { setError("Заполни все поля!"); return; }
       if (nick.length < 3) { setError("Ник минимум 3 символа"); return; }
       if (password.length < 4) { setError("Пароль минимум 4 символа"); return; }
+      const existing = getUsers().find((u) => u.nick.toLowerCase() === nick.toLowerCase());
+      if (existing) { setError("Такой ник уже занят!"); return; }
+      setError("");
+      setLoading(true);
+      setTimeout(() => {
+        saveUser({ nick: nick.trim(), name: name.trim(), password });
+        setSession(nick.trim(), name.trim());
+        setLoading(false);
+        onLogin(nick.trim(), name.trim());
+      }, 1000);
     } else {
       if (!nick.trim() || !password.trim()) { setError("Введи ник и пароль!"); return; }
+      const found = findUser(nick.trim(), password);
+      if (!found) { setError("Неверный ник или пароль!"); return; }
+      setError("");
+      setLoading(true);
+      setTimeout(() => {
+        setSession(found.nick, found.name);
+        setLoading(false);
+        onLogin(found.nick, found.name);
+      }, 900);
     }
-    setError("");
-    setLoading(true);
-    setTimeout(() => { setLoading(false); onLogin(nick, mode === "register" ? name : nick); }, 1200);
   };
+
+  const inputStyle = isDark
+    ? { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "white", borderRadius: 12, fontFamily: "'Golos Text',sans-serif" }
+    : { background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.1)", color: "#1a1a2e", borderRadius: 12, fontFamily: "'Golos Text',sans-serif" };
 
   return (
     <div className="fixed inset-0 flex items-center justify-center" style={{ background: "var(--chat-bg)" }}>
-      <Particles />
+      <Particles theme={theme} />
       <div className="relative z-10 w-full max-w-md px-4">
-        {/* Логотип */}
         <div className="text-center mb-10 animate-fade-in">
           <div
             className="inline-flex items-center justify-center w-20 h-20 rounded-3xl mb-4 animate-float"
@@ -117,13 +184,11 @@ function AuthScreen({ onLogin }: { onLogin: (nick: string, name: string) => void
             <span className="text-4xl">💬</span>
           </div>
           <h1 className="text-4xl font-black gradient-text font-golos">VibeChat</h1>
-          <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.35)" }}>Мессенджер нового поколения</p>
+          <p className="text-sm mt-1" style={{ color: isDark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.4)" }}>Мессенджер нового поколения</p>
         </div>
 
-        {/* Карточка */}
-        <div className="glass rounded-3xl p-8 animate-scale-in">
-          {/* Переключатель */}
-          <div className="flex rounded-2xl p-1 mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
+        <div className={isDark ? "glass rounded-3xl p-8 animate-scale-in" : "glass-light rounded-3xl p-8 animate-scale-in"}>
+          <div className="flex rounded-2xl p-1 mb-6" style={{ background: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
             {(["register", "login"] as AuthMode[]).map((m) => (
               <button
                 key={m}
@@ -131,7 +196,7 @@ function AuthScreen({ onLogin }: { onLogin: (nick: string, name: string) => void
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300"
                 style={mode === m
                   ? { background: "linear-gradient(135deg, #7c3aed, #ec4899)", color: "white" }
-                  : { color: "rgba(255,255,255,0.4)" }
+                  : { color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.4)" }
                 }
               >
                 {m === "register" ? "Регистрация" : "Войти"}
@@ -141,9 +206,10 @@ function AuthScreen({ onLogin }: { onLogin: (nick: string, name: string) => void
 
           <div className="space-y-4">
             <div>
-              <label className="text-xs mb-1.5 block font-medium" style={{ color: "rgba(255,255,255,0.4)" }}>Ник (логин)</label>
+              <label className="text-xs mb-1.5 block font-medium" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.5)" }}>Ник (логин)</label>
               <input
-                className="input-neon w-full px-4 py-3 text-sm"
+                className="w-full px-4 py-3 text-sm"
+                style={inputStyle}
                 placeholder="@твой_ник"
                 value={nick}
                 onChange={(e) => setNick(e.target.value)}
@@ -153,9 +219,10 @@ function AuthScreen({ onLogin }: { onLogin: (nick: string, name: string) => void
 
             {mode === "register" && (
               <div className="animate-fade-in">
-                <label className="text-xs mb-1.5 block font-medium" style={{ color: "rgba(255,255,255,0.4)" }}>Твоё имя</label>
+                <label className="text-xs mb-1.5 block font-medium" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.5)" }}>Твоё имя</label>
                 <input
-                  className="input-neon w-full px-4 py-3 text-sm"
+                  className="w-full px-4 py-3 text-sm"
+                  style={inputStyle}
                   placeholder="Как тебя зовут?"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -165,9 +232,10 @@ function AuthScreen({ onLogin }: { onLogin: (nick: string, name: string) => void
             )}
 
             <div>
-              <label className="text-xs mb-1.5 block font-medium" style={{ color: "rgba(255,255,255,0.4)" }}>Пароль</label>
+              <label className="text-xs mb-1.5 block font-medium" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.5)" }}>Пароль</label>
               <input
-                className="input-neon w-full px-4 py-3 text-sm"
+                className="w-full px-4 py-3 text-sm"
+                style={inputStyle}
                 type="password"
                 placeholder="••••••••"
                 value={password}
@@ -191,14 +259,14 @@ function AuthScreen({ onLogin }: { onLogin: (nick: string, name: string) => void
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
                   <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                  Входим...
+                  {mode === "register" ? "Регистрируемся..." : "Входим..."}
                 </span>
               ) : (mode === "register" ? "Зарегистрироваться 🚀" : "Войти ✨")}
             </button>
           </div>
         </div>
 
-        <p className="text-center text-xs mt-6" style={{ color: "rgba(255,255,255,0.15)" }}>
+        <p className="text-center text-xs mt-6" style={{ color: isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.25)" }}>
           VibeChat © 2024 · Версия 1.0
         </p>
       </div>
@@ -227,11 +295,13 @@ function Avatar({ text, color, size = 40, online }: { text: string; color?: stri
 }
 
 // ===== ЧАТ =====
-function ChatView({ chat, messages, onSend, isTyping }: {
-  chat: Chat; messages: Message[]; onSend: (text: string) => void; isTyping: boolean;
+function ChatView({ chat, messages, onSend, isTyping, theme }: {
+  chat: Chat; messages: Message[]; onSend: (text: string) => void; isTyping: boolean; theme: Theme;
 }) {
   const [input, setInput] = useState("");
+  const [showEmoji, setShowEmoji] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const isDark = theme === "dark";
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isTyping]);
 
@@ -239,21 +309,34 @@ function ChatView({ chat, messages, onSend, isTyping }: {
     if (!input.trim()) return;
     onSend(input.trim());
     setInput("");
+    setShowEmoji(false);
   };
+
+  const addEmoji = (emoji: string) => {
+    setInput((prev) => prev + emoji);
+  };
+
+  const headerBg = isDark ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.8)";
+  const headerBorder = isDark ? "1px solid rgba(255,255,255,0.06)" : "1px solid rgba(0,0,0,0.08)";
+  const chatAreaBg = isDark ? "var(--chat-bg)" : "#f0f2f8";
+  const inputAreaBg = isDark ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.8)";
+  const headerTextColor = isDark ? "text-white" : "text-gray-800";
+  const timeColor = isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.35)";
+  const onlineColor = isDark ? chat.online ? "#22c55e" : "rgba(255,255,255,0.35)" : chat.online ? "#16a34a" : "rgba(0,0,0,0.35)";
 
   return (
     <div className="flex flex-col h-full">
       {/* Хедер */}
       <div className="flex items-center gap-3 px-4 py-3 flex-shrink-0"
-        style={{ background: "rgba(0,0,0,0.3)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        style={{ background: headerBg, borderBottom: headerBorder, backdropFilter: "blur(20px)" }}>
         <Avatar
           text={chat.avatar}
           color={chat.isBot ? "linear-gradient(135deg, #f97316, #ec4899)" : undefined}
           size={44} online={chat.online}
         />
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-white text-sm truncate">{chat.name}</div>
-          <div className="text-xs" style={{ color: chat.online ? "#22c55e" : "rgba(255,255,255,0.35)" }}>
+          <div className={`font-semibold text-sm truncate ${headerTextColor}`}>{chat.name}</div>
+          <div className="text-xs" style={{ color: onlineColor }}>
             {isTyping ? <span style={{ color: "var(--neon-purple)" }}>печатает...</span>
               : chat.online ? "в сети" : "не в сети"}
           </div>
@@ -261,22 +344,22 @@ function ChatView({ chat, messages, onSend, isTyping }: {
         {[{ icon: "Phone" }, { icon: "Video" }, { icon: "MoreVertical" }].map((b) => (
           <button key={b.icon}
             className="w-9 h-9 rounded-full flex items-center justify-center transition-all hover:scale-110"
-            style={{ background: "rgba(255,255,255,0.06)" }}>
-            <Icon name={b.icon} size={16} className="text-white/60" />
+            style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }}>
+            <Icon name={b.icon} size={16} className={isDark ? "text-white/60" : "text-gray-500"} />
           </button>
         ))}
       </div>
 
       {/* Сообщения */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2" style={{ background: "var(--chat-bg)" }}>
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2" style={{ background: chatAreaBg }}>
         {messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.from === "me" ? "justify-end" : "justify-start"} animate-msg`}>
             <div className="max-w-[75%]">
-              <div className={`px-4 py-2.5 text-sm leading-relaxed ${msg.from === "me" ? "msg-bubble-out" : "msg-bubble-in"}`}>
+              <div className={`px-4 py-2.5 text-sm leading-relaxed ${msg.from === "me" ? "msg-bubble-out" : isDark ? "msg-bubble-in" : "msg-bubble-in-light"}`}>
                 {msg.text}
               </div>
               <div className={`text-xs mt-1 ${msg.from === "me" ? "text-right" : "text-left"}`}
-                style={{ color: "rgba(255,255,255,0.25)" }}>
+                style={{ color: timeColor }}>
                 {msg.time}
               </div>
             </div>
@@ -284,7 +367,7 @@ function ChatView({ chat, messages, onSend, isTyping }: {
         ))}
         {isTyping && (
           <div className="flex justify-start animate-fade-in">
-            <div className="msg-bubble-in px-4 py-3 flex items-center gap-1.5">
+            <div className={`px-4 py-3 flex items-center gap-1.5 ${isDark ? "msg-bubble-in" : "msg-bubble-in-light"}`}>
               <div className="typing-dot" /><div className="typing-dot" /><div className="typing-dot" />
             </div>
           </div>
@@ -292,15 +375,37 @@ function ChatView({ chat, messages, onSend, isTyping }: {
         <div ref={endRef} />
       </div>
 
+      {/* Панель смайликов */}
+      {showEmoji && (
+        <div className="flex-shrink-0 px-3 py-2 animate-fade-in"
+          style={{ background: isDark ? "rgba(0,0,0,0.4)" : "rgba(255,255,255,0.9)", borderTop: headerBorder, backdropFilter: "blur(20px)" }}>
+          <div className="flex flex-wrap gap-1">
+            {EMOJIS.map((emoji) => (
+              <button
+                key={emoji}
+                onClick={() => addEmoji(emoji)}
+                className="w-9 h-9 text-xl rounded-lg transition-all hover:scale-125 hover:bg-black/10 flex items-center justify-center"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Инпут */}
-      <div className="px-4 py-3 flex items-center gap-3 flex-shrink-0"
-        style={{ background: "rgba(0,0,0,0.3)", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-        <button className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ background: "rgba(255,255,255,0.06)" }}>
-          <Icon name="Paperclip" size={16} className="text-white/50" />
+      <div className="px-4 py-3 flex items-center gap-2 flex-shrink-0"
+        style={{ background: inputAreaBg, borderTop: headerBorder, backdropFilter: "blur(20px)" }}>
+        <button
+          onClick={() => setShowEmoji((v) => !v)}
+          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-xl transition-all hover:scale-110"
+          style={{ background: showEmoji ? "linear-gradient(135deg,#7c3aed,#ec4899)" : isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }}
+          title="Смайлики"
+        >
+          😊
         </button>
         <input
-          className="input-neon flex-1 px-4 py-2.5 text-sm"
+          className={isDark ? "input-neon flex-1 px-4 py-2.5 text-sm" : "input-light flex-1 px-4 py-2.5 text-sm"}
           placeholder="Напиши сообщение..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -308,8 +413,8 @@ function ChatView({ chat, messages, onSend, isTyping }: {
         />
         <button onClick={send}
           className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all hover:scale-110"
-          style={{ background: input.trim() ? "linear-gradient(135deg, #7c3aed, #ec4899)" : "rgba(255,255,255,0.06)" }}>
-          <Icon name="Send" size={16} className="text-white" />
+          style={{ background: input.trim() ? "linear-gradient(135deg, #7c3aed, #ec4899)" : isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }}>
+          <Icon name="Send" size={16} className={isDark ? "text-white" : input.trim() ? "text-white" : "text-gray-400"} />
         </button>
       </div>
     </div>
@@ -317,12 +422,16 @@ function ChatView({ chat, messages, onSend, isTyping }: {
 }
 
 // ===== ГЛАВНОЕ ПРИЛОЖЕНИЕ =====
-function AppScreen({ userName, userNick }: { userName: string; userNick: string }) {
+function AppScreen({ userName, userNick, theme, onThemeToggle, onLogout }: {
+  userName: string; userNick: string; theme: Theme; onThemeToggle: () => void; onLogout: () => void;
+}) {
   const [tab, setTab] = useState<Tab>("chats");
   const [activeChat, setActiveChat] = useState<number | null>(null);
   const [notifChats, setNotifChats] = useState(2);
   const [notifBots, setNotifBots] = useState(1);
   const [isTyping, setIsTyping] = useState(false);
+
+  const isDark = theme === "dark";
 
   const [chats, setChats] = useState<Chat[]>([
     { id: 1, name: "Алина Морозова", avatar: "АМ", lastMsg: "Привет! Как дела?", time: "14:32", unread: 2, online: true },
@@ -380,19 +489,27 @@ function AppScreen({ userName, userNick }: { userName: string; userNick: string 
     { id: "settings", icon: "Settings", label: "Настройки", badge: 0 },
   ] as const;
 
+  const sidebarBg = isDark ? "var(--sidebar-bg)" : "#ffffff";
+  const sidebarBorder = isDark ? "1px solid rgba(255,255,255,0.06)" : "1px solid rgba(0,0,0,0.08)";
+  const textPrimary = isDark ? "text-white" : "text-gray-800";
+  const textMuted = isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.4)";
+  const textSection = isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.3)";
+  const hoverBg = isDark ? "hover:bg-white/5" : "hover:bg-black/5";
+  const activeBg = isDark ? "bg-white/10" : "bg-black/5";
+
   return (
     <div className="fixed inset-0 flex" style={{ background: "var(--chat-bg)", fontFamily: "'Golos Text', sans-serif" }}>
-      <Particles />
+      <Particles theme={theme} />
 
       {/* Боковая панель */}
       <div className="relative z-10 flex flex-col w-72 flex-shrink-0"
-        style={{ background: "var(--sidebar-bg)", borderRight: "1px solid rgba(255,255,255,0.06)" }}>
+        style={{ background: sidebarBg, borderRight: sidebarBorder }}>
 
         {/* Профиль */}
         <div className="flex items-center gap-3 px-4 py-4 flex-shrink-0"
-          style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+          style={{ borderBottom: sidebarBorder }}>
           <div className="avatar-glow">
-            <div className="avatar-glow-inner">
+            <div className="avatar-glow-inner" style={{ background: sidebarBg }}>
               <div className="flex items-center justify-center rounded-full font-bold text-white"
                 style={{ width: 40, height: 40, background: "linear-gradient(135deg, #7c3aed, #ec4899)", fontSize: 14 }}>
                 {userName.slice(0, 2).toUpperCase()}
@@ -400,12 +517,17 @@ function AppScreen({ userName, userNick }: { userName: string; userNick: string 
             </div>
           </div>
           <div className="flex-1 min-w-0">
-            <div className="font-semibold text-white text-sm truncate">{userName}</div>
+            <div className={`font-semibold text-sm truncate ${textPrimary}`}>{userName}</div>
             <div className="text-xs" style={{ color: "var(--neon-purple)" }}>@{userNick}</div>
           </div>
-          <button className="w-8 h-8 rounded-full flex items-center justify-center"
-            style={{ background: "rgba(255,255,255,0.05)" }}>
-            <Icon name="Edit" size={14} className="text-white/40" />
+          {/* Переключатель темы */}
+          <button
+            onClick={onThemeToggle}
+            className="w-8 h-8 rounded-full flex items-center justify-center transition-all hover:scale-110"
+            style={{ background: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)" }}
+            title={isDark ? "Светлая тема" : "Тёмная тема"}
+          >
+            <span className="text-base">{isDark ? "☀️" : "🌙"}</span>
           </button>
         </div>
 
@@ -415,8 +537,9 @@ function AppScreen({ userName, userNick }: { userName: string; userNick: string 
             <button key={item.id}
               onClick={() => { setTab(item.id as Tab); setActiveChat(null); }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
-                tab === item.id ? "nav-item-active text-white" : "text-white/40 hover:text-white/70 hover:bg-white/5"
-              }`}>
+                tab === item.id ? "nav-item-active" : `${isDark ? "text-white/40 hover:text-white/70" : "text-gray-500 hover:text-gray-700"} ${hoverBg}`
+              }`}
+              style={tab === item.id ? { color: isDark ? "white" : "#7c3aed" } : {}}>
               <Icon name={item.icon} size={18} />
               <span className="flex-1 text-left">{item.label}</span>
               {item.badge > 0 && (
@@ -436,10 +559,10 @@ function AppScreen({ userName, userNick }: { userName: string; userNick: string 
           {/* ЧАТЫ */}
           {tab === "chats" && (
             <div className="space-y-1">
-              <div className="px-2 py-1 text-xs font-semibold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.2)" }}>Диалоги</div>
+              <div className="px-2 py-1 text-xs font-semibold uppercase tracking-wider" style={{ color: textSection }}>Диалоги</div>
               {chats.map((chat) => (
                 <button key={chat.id} onClick={() => openChat(chat.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${activeChat === chat.id ? "bg-white/10" : "hover:bg-white/5"}`}>
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${activeChat === chat.id ? activeBg : hoverBg}`}>
                   <Avatar
                     text={chat.avatar}
                     color={chat.isBot ? "linear-gradient(135deg, #f97316, #ec4899)" : undefined}
@@ -447,11 +570,11 @@ function AppScreen({ userName, userNick }: { userName: string; userNick: string 
                   />
                   <div className="flex-1 min-w-0 text-left">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-white truncate">{chat.name}</span>
-                      <span className="text-xs flex-shrink-0 ml-1" style={{ color: "rgba(255,255,255,0.25)" }}>{chat.time}</span>
+                      <span className={`text-sm font-medium truncate ${textPrimary}`}>{chat.name}</span>
+                      <span className="text-xs flex-shrink-0 ml-1" style={{ color: textMuted }}>{chat.time}</span>
                     </div>
                     <div className="flex items-center justify-between mt-0.5">
-                      <span className="text-xs truncate" style={{ color: "rgba(255,255,255,0.35)" }}>{chat.lastMsg}</span>
+                      <span className="text-xs truncate" style={{ color: textMuted }}>{chat.lastMsg}</span>
                       {chat.unread > 0 && (
                         <span className="notif-badge rounded-full w-5 h-5 text-xs flex items-center justify-center text-white font-bold flex-shrink-0 ml-1">
                           {chat.unread}
@@ -467,17 +590,17 @@ function AppScreen({ userName, userNick }: { userName: string; userNick: string 
           {/* КОНТАКТЫ */}
           {tab === "contacts" && (
             <div className="space-y-1 animate-fade-in">
-              <div className="px-2 py-1 text-xs font-semibold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.2)" }}>Контакты</div>
+              <div className="px-2 py-1 text-xs font-semibold uppercase tracking-wider" style={{ color: textSection }}>Контакты</div>
               {CONTACTS.map((c) => (
-                <div key={c.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-all cursor-pointer">
+                <div key={c.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl ${hoverBg} transition-all cursor-pointer`}>
                   <Avatar text={c.avatar} color={c.color} size={42} online={c.status === "В сети"} />
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-white truncate">{c.name}</div>
-                    <div className="text-xs" style={{ color: c.status === "В сети" ? "#22c55e" : "rgba(255,255,255,0.3)" }}>{c.status}</div>
+                    <div className={`text-sm font-medium truncate ${textPrimary}`}>{c.name}</div>
+                    <div className="text-xs" style={{ color: c.status === "В сети" ? "#22c55e" : textMuted }}>{c.status}</div>
                   </div>
                   <button className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
-                    style={{ background: "rgba(255,255,255,0.05)" }}>
-                    <Icon name="MessageCircle" size={13} className="text-white/40" />
+                    style={{ background: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
+                    <Icon name="MessageCircle" size={13} className={isDark ? "text-white/40" : "text-gray-400"} />
                   </button>
                 </div>
               ))}
@@ -487,7 +610,7 @@ function AppScreen({ userName, userNick }: { userName: string; userNick: string 
           {/* БОТЫ */}
           {tab === "bots" && (
             <div className="space-y-2 py-1 animate-fade-in">
-              <div className="px-2 py-1 text-xs font-semibold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.2)" }}>Боты</div>
+              <div className="px-2 py-1 text-xs font-semibold uppercase tracking-wider" style={{ color: textSection }}>Боты</div>
               <div
                 className="mx-1 rounded-2xl p-4 cursor-pointer transition-all hover:scale-[1.02]"
                 style={{ background: "linear-gradient(135deg, rgba(249,115,22,0.15), rgba(236,72,153,0.15))", border: "1px solid rgba(249,115,22,0.3)" }}
@@ -499,7 +622,7 @@ function AppScreen({ userName, userNick }: { userName: string; userNick: string 
                     🤖
                   </div>
                   <div className="flex-1">
-                    <div className="font-bold text-white text-sm">Веселушка</div>
+                    <div className={`font-bold text-sm ${textPrimary}`}>Веселушка</div>
                     <div className="text-xs" style={{ color: "#f97316" }}>● Активен сейчас</div>
                   </div>
                   {notifBots > 0 && (
@@ -508,7 +631,7 @@ function AppScreen({ userName, userNick }: { userName: string; userNick: string 
                     </span>
                   )}
                 </div>
-                <p className="text-xs leading-relaxed mb-3" style={{ color: "rgba(255,255,255,0.5)" }}>
+                <p className="text-xs leading-relaxed mb-3" style={{ color: isDark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.5)" }}>
                   Дружелюбный бот! Напиши «привет» и он ответит 😊
                 </p>
                 <button className="w-full py-2 rounded-xl text-xs font-semibold text-white transition-all hover:opacity-90"
@@ -528,7 +651,7 @@ function AppScreen({ userName, userNick }: { userName: string; userNick: string 
                   {userName.slice(0, 2).toUpperCase()}
                 </div>
                 <div className="text-center">
-                  <div className="font-bold text-white">{userName}</div>
+                  <div className={`font-bold ${textPrimary}`}>{userName}</div>
                   <div className="text-sm" style={{ color: "var(--neon-purple)" }}>@{userNick}</div>
                 </div>
               </div>
@@ -537,7 +660,7 @@ function AppScreen({ userName, userNick }: { userName: string; userNick: string 
                 { icon: "User", label: "Имя", value: userName },
                 { icon: "AtSign", label: "Ник", value: `@${userNick}` },
                 { icon: "Shield", label: "Статус", value: "В сети" },
-                { icon: "Calendar", label: "В VibeChat с", value: "18 марта 2024" },
+                { icon: "Calendar", label: "В VibeChat с", value: "19 марта 2026" },
               ].map((item) => (
                 <div key={item.label} className="flex items-center gap-3 px-2 py-2">
                   <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
@@ -545,8 +668,8 @@ function AppScreen({ userName, userNick }: { userName: string; userNick: string 
                     <Icon name={item.icon} size={14} style={{ color: "var(--neon-purple)" }} />
                   </div>
                   <div>
-                    <div className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>{item.label}</div>
-                    <div className="text-sm text-white">{item.value}</div>
+                    <div className="text-xs" style={{ color: textMuted }}>{item.label}</div>
+                    <div className={`text-sm ${textPrimary}`}>{item.value}</div>
                   </div>
                 </div>
               ))}
@@ -556,28 +679,62 @@ function AppScreen({ userName, userNick }: { userName: string; userNick: string 
           {/* НАСТРОЙКИ */}
           {tab === "settings" && (
             <div className="px-2 py-4 space-y-2 animate-fade-in">
-              <div className="px-2 py-1 text-xs font-semibold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.2)" }}>Настройки</div>
+              <div className="px-2 py-1 text-xs font-semibold uppercase tracking-wider" style={{ color: textSection }}>Настройки</div>
+
+              {/* Переключатель темы */}
+              <div className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl ${hoverBg} transition-all`}>
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
+                  <span className="text-base">{isDark ? "🌙" : "☀️"}</span>
+                </div>
+                <div className="flex-1 text-left">
+                  <div className={`text-sm ${textPrimary}`}>Тема</div>
+                  <div className="text-xs" style={{ color: textMuted }}>{isDark ? "Тёмная" : "Светлая"}</div>
+                </div>
+                <button
+                  onClick={onThemeToggle}
+                  className="relative w-11 h-6 rounded-full transition-all duration-300 flex-shrink-0"
+                  style={{ background: isDark ? "linear-gradient(135deg,#7c3aed,#ec4899)" : "rgba(0,0,0,0.15)" }}
+                >
+                  <div
+                    className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all duration-300"
+                    style={{ left: isDark ? "calc(100% - 22px)" : "2px" }}
+                  />
+                </button>
+              </div>
+
               {[
                 { icon: "Bell", label: "Уведомления", desc: "Включены" },
-                { icon: "Palette", label: "Тема", desc: "Тёмная / Неон" },
                 { icon: "Lock", label: "Конфиденциальность", desc: "Настройки" },
                 { icon: "Volume2", label: "Звуки", desc: "Включены" },
                 { icon: "HelpCircle", label: "Помощь", desc: "FAQ" },
-                { icon: "LogOut", label: "Выйти", desc: "", danger: true },
-              ].map((item: { icon: string; label: string; desc: string; danger?: boolean }) => (
+              ].map((item) => (
                 <button key={item.label}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-all text-left">
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl ${hoverBg} transition-all text-left`}>
                   <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{ background: item.danger ? "rgba(239,68,68,0.15)" : "rgba(255,255,255,0.05)" }}>
-                    <Icon name={item.icon} size={14} style={{ color: item.danger ? "#ef4444" : "rgba(255,255,255,0.4)" }} />
+                    style={{ background: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
+                    <Icon name={item.icon} size={14} style={{ color: isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.4)" }} />
                   </div>
                   <div className="flex-1">
-                    <div className="text-sm" style={{ color: item.danger ? "#ef4444" : "white" }}>{item.label}</div>
-                    {item.desc && <div className="text-xs" style={{ color: "rgba(255,255,255,0.25)" }}>{item.desc}</div>}
+                    <div className={`text-sm ${textPrimary}`}>{item.label}</div>
+                    <div className="text-xs" style={{ color: textMuted }}>{item.desc}</div>
                   </div>
-                  {!item.danger && <Icon name="ChevronRight" size={14} className="text-white/20" />}
+                  <Icon name="ChevronRight" size={14} style={{ color: textMuted }} />
                 </button>
               ))}
+
+              {/* Выход */}
+              <button
+                onClick={onLogout}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left hover:bg-red-500/10`}>
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: "rgba(239,68,68,0.15)" }}>
+                  <Icon name="LogOut" size={14} style={{ color: "#ef4444" }} />
+                </div>
+                <div className="flex-1">
+                  <div className="text-sm text-red-400">Выйти</div>
+                </div>
+              </button>
             </div>
           )}
         </div>
@@ -591,6 +748,7 @@ function AppScreen({ userName, userNick }: { userName: string; userNick: string 
             messages={allMessages[activeChat] || []}
             onSend={handleSend}
             isTyping={isTyping}
+            theme={theme}
           />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center gap-4 animate-fade-in">
@@ -600,8 +758,8 @@ function AppScreen({ userName, userNick }: { userName: string; userNick: string 
             </div>
             <div className="text-center">
               <h2 className="text-2xl font-black gradient-text font-golos mb-2">VibeChat</h2>
-              <p className="text-sm" style={{ color: "rgba(255,255,255,0.3)" }}>Выбери чат из списка слева</p>
-              <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.2)" }}>Или пообщайся с ботом Веселушкой 🤖</p>
+              <p className="text-sm" style={{ color: isDark ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.4)" }}>Выбери чат из списка слева</p>
+              <p className="text-xs mt-1" style={{ color: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.3)" }}>Или пообщайся с ботом Веселушкой 🤖</p>
             </div>
           </div>
         )}
@@ -614,12 +772,49 @@ function AppScreen({ userName, userNick }: { userName: string; userNick: string 
 export default function Index() {
   const [screen, setScreen] = useState<Screen>("auth");
   const [user, setUser] = useState({ nick: "", name: "" });
+  const [theme, setTheme] = useState<Theme>(() => {
+    return (localStorage.getItem("vc_theme") as Theme) || "dark";
+  });
+
+  // Проверяем сессию при загрузке
+  useEffect(() => {
+    const session = getSession();
+    if (session) {
+      setUser(session);
+      setScreen("app");
+    }
+  }, []);
+
+  // Применяем тему к body
+  useEffect(() => {
+    localStorage.setItem("vc_theme", theme);
+    document.documentElement.setAttribute("data-theme", theme);
+    document.body.style.background = theme === "dark" ? "var(--chat-bg)" : "var(--chat-bg-light)";
+  }, [theme]);
 
   const handleLogin = (nick: string, name: string) => {
     setUser({ nick, name });
     setScreen("app");
   };
 
-  if (screen === "auth") return <AuthScreen onLogin={handleLogin} />;
-  return <AppScreen userName={user.name} userNick={user.nick} />;
+  const handleLogout = () => {
+    clearSession();
+    setUser({ nick: "", name: "" });
+    setScreen("auth");
+  };
+
+  const toggleTheme = () => {
+    setTheme((t) => t === "dark" ? "light" : "dark");
+  };
+
+  if (screen === "auth") return <AuthScreen onLogin={handleLogin} theme={theme} />;
+  return (
+    <AppScreen
+      userName={user.name}
+      userNick={user.nick}
+      theme={theme}
+      onThemeToggle={toggleTheme}
+      onLogout={handleLogout}
+    />
+  );
 }
