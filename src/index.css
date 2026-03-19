@@ -461,3 +461,14 @@
   );
   opacity: 0.4;
 }
+
+/* Safe area для мобильных (iPhone notch/home bar) */
+.pb-safe {
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+}
+
+/* Убираем bounce-скролл на iOS */
+html,
+body {
+  overscroll-behavior: none;
+}
